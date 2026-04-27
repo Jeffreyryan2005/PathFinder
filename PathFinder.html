@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PathFinder — Real Road Route Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080810;--surface:#0e0e18;--card:#13131e;--card2:#191926;
+  --border:#ffffff0f;--border2:#ffffff1a;--border3:#ffffff28;
+  --accent:#00e5a0;--accent-dim:#00e5a022;
+  --purple:#8b5cf6;--purple-dim:#8b5cf618;
+  --amber:#f59e0b;--red:#ef4444;--blue:#38bdf8;
+  --text:#eeeef8;--muted:#7777aa;--muted2:#4a4a70;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;display:flex;flex-direction:column}
+
+/* ─── HEADER ─── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 22px;background:var(--surface);
+  border-bottom:1px solid var(--border2);flex-shrink:0;z-index:1000;position:relative
+}
+.logo{display:flex;align-items:center;gap:11px}
+.logo-mark{
+  width:38px;height:38px;border-radius:11px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,#00e5a0,#7c3aed);
+  display:flex;align-items:center;justify-content:center
+}
+.logo-mark svg{width:20px;height:20px}
+.logo-text{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;letter-spacing:-0.5px}
+.logo-text em{color:var(--accent);font-style:normal}
+.logo-sub{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:1.5px;margin-top:1px}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--accent-dim);border:1px solid var(--accent)33;
+  border-radius:20px;padding:4px 10px;font-size:10px;
+  color:var(--accent);font-family:'DM Mono',monospace;letter-spacing:0.5px
+}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+
+.hstats{display:flex;gap:6px}
+.hstat{
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:6px 12px;text-align:center;min-width:80px
+}
+.hstat-v{font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--accent);transition:color 0.3s}
+.hstat-l{font-size:9px;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;margin-top:1px}
+
+/* ─── LAYOUT ─── */
+.main{display:flex;flex:1;overflow:hidden}
+
+/* ─── SIDEBAR ─── */
+.sidebar{
+  width:300px;flex-shrink:0;background:var(--surface);
+  border-right:1px solid var(--border2);display:flex;
+  flex-direction:column;overflow:hidden
+}
+.sb-scroll{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.panel{padding:16px 18px;border-bottom:1px solid var(--border)}
+.ptitle{
+  font-size:9px;font-weight:600;color:var(--muted2);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;
+  font-family:'DM Mono',monospace
+}
+
+/* toggle grids */
+.tog2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.tog3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.tbtn{
+  padding:9px 6px;border-radius:7px;border:1px solid var(--border2);
+  background:transparent;color:var(--muted);cursor:pointer;
+  font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.3px;
+  transition:all 0.18s;text-align:center;white-space:nowrap
+}
+.tbtn:hover:not(.on){border-color:var(--border3);color:var(--text)}
+.tbtn.on.green{background:var(--accent-dim);border-color:var(--accent)44;color:var(--accent)}
+.tbtn.on.purple{background:var(--purple-dim);border-color:var(--purple)44;color:var(--purple)}
+
+/* point cards */
+.pcard{
+  display:flex;align-items:center;gap:11px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:9px;padding:11px 13px;margin-bottom:7px;
+  cursor:pointer;transition:all 0.18s
+}
+.pcard:hover{border-color:var(--border2)}
+.pcard.active-card{border-color:var(--accent)44;background:var(--accent-dim)}
+.pcard.placed{border-color:var(--accent)22}
+.pdot{
+  width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;font-family:'DM Mono',monospace
+}
+.pdot-s{background:var(--accent-dim);color:var(--accent);border:1.5px solid var(--accent)44}
+.pdot-e{background:#ef444418;color:var(--red);border:1.5px solid #ef444444}
+.pinfo{flex:1;min-width:0}
+.plabel{font-size:11px;color:var(--muted);margin-bottom:2px}
+.pcoords{font-family:'DM Mono',monospace;font-size:10px;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paddr{font-size:10px;color:var(--muted);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic}
+
+/* speed slider */
+.slider-row{display:flex;align-items:center;gap:10px;margin-top:6px}
+.slider-label{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+input[type=range]{
+  flex:1;-webkit-appearance:none;height:3px;border-radius:2px;
+  background:var(--border3);outline:none
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);cursor:pointer
+}
+.slider-val{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);min-width:28px;text-align:right}
+
+/* buttons */
+.btn-main{
+  width:100%;padding:12px;border-radius:9px;border:none;
+  background:linear-gradient(135deg,var(--accent),#00c48a);
+  color:#000;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;
+  cursor:pointer;letter-spacing:0.8px;transition:all 0.2s;margin-top:3px;
+  display:flex;align-items:center;justify-content:center;gap:8px
+}
+.btn-main:hover:not(:disabled){opacity:0.88;transform:translateY(-1px)}
+.btn-main:disabled{opacity:0.25;cursor:not-allowed;transform:none}
+.btn-sub{
+  width:100%;padding:9px;border-radius:9px;
+  border:1px solid var(--border2);background:transparent;
+  color:var(--muted);font-family:'DM Sans',sans-serif;font-size:11px;
+  cursor:pointer;transition:all 0.18s;margin-top:6px
+}
+.btn-sub:hover{border-color:var(--border3);color:var(--text)}
+
+/* results */
+.rcard{
+  background:var(--card2);border:1px solid var(--border);
+  border-radius:9px;padding:13px;margin-bottom:10px
+}
+.rrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.rrow:last-child{margin-bottom:0}
+.rkey{font-size:11px;color:var(--muted)}
+.rval{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--accent)}
+.rsep{height:1px;background:var(--border);margin:9px 0}
+
+.cmp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.cbox{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:9px;text-align:center
+}
+.cbox.win{border-color:var(--accent)44;background:var(--accent)08}
+.cname{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:5px;letter-spacing:0.5px}
+.cdist{font-size:12px;font-weight:500;font-family:'DM Mono',monospace}
+.cnodes{font-size:9px;color:var(--muted);margin-top:2px}
+
+.steps{max-height:160px;overflow-y:auto;margin-top:4px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.step{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)}
+.snum{
+  width:18px;height:18px;border-radius:50%;flex-shrink:0;
+  background:var(--purple-dim);color:var(--purple);
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-family:'DM Mono',monospace;margin-top:1px
+}
+.stext{font-size:10px;color:var(--muted);line-height:1.5}
+
+/* ─── MAP AREA ─── */
+.map-col{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+.hint-bar{
+  padding:9px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;
+  font-size:10px;color:var(--accent);font-family:'DM Mono',monospace;flex-shrink:0;
+  background:var(--accent)06
+}
+
+/* anim controls bar */
+.anim-bar{
+  padding:10px 18px;background:var(--surface);border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;display:none
+}
+.anim-btn{
+  padding:6px 14px;border-radius:7px;border:1px solid var(--border2);
+  background:transparent;color:var(--muted);cursor:pointer;
+  font-family:'DM Mono',monospace;font-size:10px;transition:all 0.18s
+}
+.anim-btn:hover{border-color:var(--border3);color:var(--text)}
+.anim-btn.primary{background:var(--purple-dim);border-color:var(--purple)44;color:var(--purple)}
+.progress-track{flex:1;height:3px;background:var(--border2);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--purple),var(--accent));border-radius:2px;width:0%;transition:width 0.1s}
+.anim-info{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+
+.map-wrap{flex:1;position:relative}
+#map{width:100%;height:100%}
+
+/* loading overlay */
+#loading{
+  position:absolute;inset:0;background:var(--bg)cc;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  z-index:900;backdrop-filter:blur(6px)
+}
+.spin{
+  width:44px;height:44px;border:2px solid var(--border2);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin 0.7s linear infinite;margin-bottom:14px
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-text{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);margin-bottom:6px}
+.load-sub{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace}
+
+/* legend */
+.legend{
+  position:absolute;bottom:20px;right:16px;z-index:500;
+  background:var(--surface)f0;border:1px solid var(--border2);
+  border-radius:10px;padding:11px 14px;backdrop-filter:blur(12px)
+}
+.ltitle{font-size:9px;color:var(--muted2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:9px;font-family:'DM Mono',monospace}
+.litem{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);margin-bottom:5px}
+.lline{width:22px;height:3px;border-radius:2px;flex-shrink:0}
+.ldot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* toast */
+.toast{
+  position:fixed;bottom:22px;left:50%;
+  transform:translateX(-50%) translateY(70px);
+  background:var(--card);border:1px solid var(--border2);border-radius:8px;
+  padding:9px 16px;font-size:11px;color:var(--text);
+  transition:transform 0.25s;z-index:9999;font-family:'DM Mono',monospace;
+  white-space:nowrap;pointer-events:none
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* error card */
+.err-card{
+  background:#ef444410;border:1px solid #ef444430;border-radius:8px;
+  padding:10px 13px;font-size:11px;color:#ef4444;
+  font-family:'DM Mono',monospace;margin-top:8px;display:none
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="4" cy="10" r="2.5" fill="white" opacity="0.9"/>
+        <circle cx="16" cy="4" r="2.5" fill="white" opacity="0.9"/>
+        <circle cx="16" cy="16" r="2.5" fill="white" opacity="0.9"/>
+        <line x1="6" y1="9" x2="14" y2="5" stroke="white" stroke-width="1.2" opacity="0.7"/>
+        <line x1="6" y1="11" x2="14" y2="15" stroke="white" stroke-width="1.2" opacity="0.7"/>
+        <path d="M8 10 Q12 7 14 5" stroke="white" stroke-width="1.5" stroke-dasharray="2 1.5" opacity="0.5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Path<em>Finder</em></div>
+      <div class="logo-sub">Real Road Intelligence</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="badge"><span class="badge-dot"></span>OSRM + OSM Live</div>
+    <div class="hstats">
+      <div class="hstat"><div class="hstat-v" id="hv-nodes">—</div><div class="hstat-l">Nodes</div></div>
+      <div class="hstat"><div class="hstat-v" id="hv-dist">—</div><div class="hstat-l">km</div></div>
+      <div class="hstat"><div class="hstat-v" id="hv-ms">—</div><div class="hstat-l">ms</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+<!-- ─── SIDEBAR ─── -->
+<div class="sidebar">
+<div class="sb-scroll">
+
+  <div class="panel">
+    <div class="ptitle">Click Mode</div>
+    <div class="tog2">
+      <button class="tbtn on green" id="b-start" onclick="setMode('start')">⬤ Start</button>
+      <button class="tbtn green" id="b-end" onclick="setMode('end')">⬤ End</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">Algorithm</div>
+    <div class="tog3">
+      <button class="tbtn on purple" id="a-astar" onclick="setAlgo('astar')">A*</button>
+      <button class="tbtn purple" id="a-dijkstra" onclick="setAlgo('dijkstra')">Dijkstra</button>
+      <button class="tbtn purple" id="a-bfs" onclick="setAlgo('bfs')">BFS</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">Animation Speed</div>
+    <div class="slider-row">
+      <span class="slider-label">Slow</span>
+      <input type="range" min="1" max="10" value="5" id="speed-slider" oninput="updateSpeed(this.value)">
+      <span class="slider-label">Fast</span>
+      <span class="slider-val" id="speed-val">5×</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">Waypoints</div>
+    <div class="pcard active-card" id="card-start" onclick="setMode('start')">
+      <div class="pdot pdot-s">S</div>
+      <div class="pinfo">
+        <div class="plabel">Start point</div>
+        <div class="pcoords" id="coords-start">Click map to place</div>
+        <div class="paddr" id="addr-start"></div>
+      </div>
+    </div>
+    <div class="pcard" id="card-end" onclick="setMode('end')">
+      <div class="pdot pdot-e">E</div>
+      <div class="pinfo">
+        <div class="plabel">Destination</div>
+        <div class="pcoords" id="coords-end">Click map to place</div>
+        <div class="paddr" id="addr-end"></div>
+      </div>
+    </div>
+    <div class="err-card" id="err-card">⚠ Could not load road network. Using synthetic graph instead.</div>
+    <button class="btn-main" id="find-btn" onclick="findRoute()" disabled>
+      <span id="btn-icon">▶</span> Find Optimal Route
+    </button>
+    <button class="btn-sub" onclick="resetAll()">↺ Reset Map</button>
+  </div>
+
+  <div id="results-panel" style="display:none;padding:16px 18px">
+    <div class="ptitle">Route Analysis</div>
+    <div class="rcard">
+      <div class="rrow"><span class="rkey">Distance</span><span class="rval" id="r-dist">—</span></div>
+      <div class="rrow"><span class="rkey">Est. Time</span><span class="rval" id="r-time">—</span></div>
+      <div class="rrow"><span class="rkey">Nodes explored</span><span class="rval" id="r-expl">—</span></div>
+      <div class="rrow"><span class="rkey">Road segments</span><span class="rval" id="r-segs">—</span></div>
+      <div class="rsep"></div>
+      <div class="rrow"><span class="rkey">Algorithm</span><span class="rval" id="r-algo">—</span></div>
+      <div class="rrow"><span class="rkey">Compute time</span><span class="rval" id="r-ms">—</span></div>
+      <div class="rrow"><span class="rkey">Road nodes loaded</span><span class="rval" id="r-osmn">—</span></div>
+    </div>
+
+    <div class="ptitle">Algorithm Comparison</div>
+    <div class="cmp-grid" id="cmp-grid"></div>
+
+    <div class="ptitle" style="margin-top:14px">Turn-by-Turn</div>
+    <div class="steps" id="step-list"></div>
+  </div>
+
+</div><!-- /sb-scroll -->
+</div><!-- /sidebar -->
+
+<!-- ─── MAP COL ─── -->
+<div class="map-col">
+  <div class="hint-bar">
+    <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="var(--accent)"/></svg>
+    <span id="hint-text">Click anywhere on the map to place your start point</span>
+  </div>
+
+  <div class="anim-bar" id="anim-bar">
+    <button class="anim-btn primary" id="anim-play" onclick="toggleAnim()">⏸ Pause</button>
+    <button class="anim-btn" onclick="restartAnim()">↺ Replay</button>
+    <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+    <div class="anim-info" id="anim-info">Exploring nodes...</div>
+    <button class="anim-btn" onclick="skipAnim()">Skip ⏭</button>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <div id="loading">
+      <div class="spin"></div>
+      <div class="load-text" id="load-text">Fetching road network...</div>
+      <div class="load-sub" id="load-sub">Querying OpenStreetMap Overpass API</div>
+    </div>
+
+    <div class="legend">
+      <div class="ltitle">Legend</div>
+      <div class="litem"><div class="lline" style="background:var(--accent)"></div>Optimal path</div>
+      <div class="litem"><div class="lline" style="background:var(--purple)55;border:1px dashed var(--purple)"></div>Explored nodes</div>
+      <div class="litem"><div class="lline" style="background:#38bdf855"></div>Road network</div>
+      <div class="litem"><div class="ldot" style="background:var(--accent)"></div>Start</div>
+      <div class="litem"><div class="ldot" style="background:var(--red)"></div>End</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let map, startM, endM;
+let routeLayer = null, exploredLayer = null, roadLayer = null;
+let startLL = null, endLL = null;
+let mode = 'start', algo = 'astar', animSpeed = 5;
+
+// graph state
+let graphNodes = [], graphEdges = [], adjList = {};
+let lastResult = null;
+
+// animation state
+let animFrames = [];
+let animIdx = 0;
+let animTimer = null;
+let animRunning = false;
+let animDone = false;
+let exploredMarkers = [];
+let pathPolyline = null;
+
+// ═══════════════════════════════════════════════════════
+//  MAP INIT
+// ═══════════════════════════════════════════════════════
+function initMap() {
+  map = L.map('map', { center: [13.0827, 80.2707], zoom: 13, zoomControl: false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19
+  }).addTo(map);
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+  map.on('click', onMapClick);
+}
+
+const mkIcon = (color, letter) => L.divIcon({
+  html: `<div style="width:34px;height:34px;background:${color};border:2.5px solid rgba(255,255,255,0.9);border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 4px 16px ${color}88;display:flex;align-items:center;justify-content:center">
+    <span style="transform:rotate(45deg);color:#000;font-weight:700;font-size:11px;font-family:DM Mono,monospace">${letter}</span>
+  </div>`,
+  iconSize: [34,34], iconAnchor: [17,30], className: ''
+});
+const startIcon = mkIcon('#00e5a0','S');
+const endIcon   = mkIcon('#ef4444','E');
+
+// ═══════════════════════════════════════════════════════
+//  UI CONTROLS
+// ═══════════════════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  ['start','end'].forEach(x => {
+    document.getElementById('b-'+x).classList.toggle('on', x===m);
+    document.getElementById('card-'+x).classList.toggle('active-card', x===m);
+  });
+  document.getElementById('hint-text').textContent = m==='start'
+    ? 'Click on the map to place your start point'
+    : 'Click on the map to place your destination';
+}
+
+function setAlgo(a) {
+  algo = a;
+  ['astar','dijkstra','bfs'].forEach(x =>
+    document.getElementById('a-'+x).classList.toggle('on', x===a));
+}
+
+function updateSpeed(v) {
+  animSpeed = +v;
+  document.getElementById('speed-val').textContent = v+'×';
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAP CLICK → PLACE MARKERS
+// ═══════════════════════════════════════════════════════
+function onMapClick(e) {
+  const {lat,lng} = e.latlng;
+  if (mode === 'start') {
+    startLL = e.latlng;
+    if (startM) map.removeLayer(startM);
+    startM = L.marker([lat,lng],{icon:startIcon}).addTo(map);
+    document.getElementById('coords-start').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById('addr-start').textContent = '';
+    document.getElementById('card-start').classList.add('placed');
+    reverseGeocode(lat, lng, 'addr-start');
+    setMode('end');
+    toast('Start placed — now set your destination');
+  } else {
+    endLL = e.latlng;
+    if (endM) map.removeLayer(endM);
+    endM = L.marker([lat,lng],{icon:endIcon}).addTo(map);
+    document.getElementById('coords-end').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById('addr-end').textContent = '';
+    document.getElementById('card-end').classList.add('placed');
+    reverseGeocode(lat, lng, 'addr-end');
+    document.getElementById('hint-text').textContent = 'Both points set — click Find Optimal Route!';
+    toast('Destination placed — ready to route!');
+  }
+  if (startLL && endLL) document.getElementById('find-btn').disabled = false;
+}
+
+async function reverseGeocode(lat, lng, elId) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+      {headers:{'Accept-Language':'en'}});
+    const d = await r.json();
+    const a = d.address;
+    const name = a.road || a.suburb || a.neighbourhood || a.city_district || '';
+    const city = a.city || a.town || a.village || '';
+    document.getElementById(elId).textContent = [name,city].filter(Boolean).join(', ');
+  } catch(e){}
+}
+
+// ═══════════════════════════════════════════════════════
+//  OSRM API — FETCH REAL ROAD ROUTE GEOMETRY
+// ═══════════════════════════════════════════════════════
+async function fetchOSRMRoute(s, e) {
+  // OSRM public API — returns real road-following geometry
+  const url = `https://router.project-osrm.org/route/v1/driving/${s.lng},${s.lat};${e.lng},${e.lat}?overview=full&geometries=geojson&steps=true&annotations=true`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('OSRM error: ' + resp.status);
+  const data = await resp.json();
+  if (!data.routes || data.routes.length === 0) throw new Error('No route found');
+  return data;
+}
+
+// Try multiple Overpass mirrors
+async function fetchRoadNetwork(s, e) {
+  const lat1 = Math.min(s.lat,e.lat) - 0.012;
+  const lon1 = Math.min(s.lng,e.lng) - 0.012;
+  const lat2 = Math.max(s.lat,e.lat) + 0.012;
+  const lon2 = Math.max(s.lng,e.lng) + 0.012;
+  const query = `[out:json][timeout:15];(way["highway"~"^(primary|secondary|tertiary|residential|unclassified|trunk|living_street)$"](${lat1},${lon1},${lat2},${lon2}););out body;>;out skel qt;`;
+  const mirrors = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+  ];
+  for (const url of mirrors) {
+    try {
+      const r = await fetch(url, {method:'POST',body:'data='+encodeURIComponent(query),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:AbortSignal.timeout(8000)});
+      if (r.ok) return r.json();
+    } catch(e) {}
+  }
+  throw new Error('All Overpass mirrors failed');
+}
+
+// Build graph from OSRM geometry coordinates
+// node[0] = start point, node[last] = end point — si=0, ei=last
+function buildGraphFromOSRM(coords) {
+  // coords = [[lng,lat], ...] from GeoJSON
+  const nodes = coords.map((c, i) => ({ lat: c[1], lng: c[0], idx: i }));
+  const edges = [];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const d = haversine(nodes[i].lat, nodes[i].lng, nodes[i+1].lat, nodes[i+1].lng);
+    edges.push({ from: i, to: i+1, weight: d });
+    edges.push({ from: i+1, to: i, weight: d });
+    // add skip-connections for algorithm exploration variety
+    if (i > 0 && i < nodes.length - 2) {
+      const skip = Math.min(i + 5, nodes.length - 1);
+      const ds = haversine(nodes[i].lat, nodes[i].lng, nodes[skip].lat, nodes[skip].lng);
+      if (ds < 0.8) {
+        edges.push({ from: i, to: skip, weight: ds });
+        edges.push({ from: skip, to: i, weight: ds });
+      }
+    }
+  }
+  const adj = {};
+  nodes.forEach((_, i) => adj[i] = []);
+  edges.forEach(e => { if (adj[e.from]) adj[e.from].push({ to: e.to, w: e.weight }); });
+  // si=0 (first coord = start), ei=last (last coord = end)
+  return { nodes, edges, adj, si: 0, ei: nodes.length - 1 };
+}
+
+function buildGraphFromOSM(data, startLL, endLL) {
+  const nodeMap = {};
+  data.elements.filter(e=>e.type==='node').forEach(n => {
+    nodeMap[n.id] = { id: n.id, lat: n.lat, lng: n.lon, idx: -1 };
+  });
+  const nodes = [];
+  const edges = [];
+  const startNode = { id:'START', lat:startLL.lat, lng:startLL.lng, idx:0 };
+  const endNode   = { id:'END',   lat:endLL.lat,   lng:endLL.lng,   idx:1 };
+  nodes.push(startNode, endNode);
+  const ways = data.elements.filter(e=>e.type==='way' && e.nodes);
+  ways.forEach(way => {
+    for (let i=0; i<way.nodes.length; i++) {
+      const nid = way.nodes[i];
+      if (nodeMap[nid] && nodeMap[nid].idx === -1) {
+        nodeMap[nid].idx = nodes.length;
+        nodes.push(nodeMap[nid]);
+      }
+    }
+    for (let i=0; i<way.nodes.length-1; i++) {
+      const a = nodeMap[way.nodes[i]], b = nodeMap[way.nodes[i+1]];
+      if (a && b && a.idx>=0 && b.idx>=0) {
+        const d = haversine(a.lat,a.lng,b.lat,b.lng);
+        edges.push({from:a.idx, to:b.idx, weight:d});
+        edges.push({from:b.idx, to:a.idx, weight:d});
+      }
+    }
+  });
+  [0,1].forEach(pi => {
+    const pivot = nodes[pi];
+    const others = nodes.slice(2).map((n,i)=>({idx:n.idx,d:haversine(pivot.lat,pivot.lng,n.lat,n.lng)}))
+      .sort((a,b)=>a.d-b.d).slice(0,5);
+    others.forEach(o => {
+      edges.push({from:pi, to:o.idx, weight:o.d});
+      edges.push({from:o.idx, to:pi, weight:o.d});
+    });
+  });
+  const adj = {};
+  nodes.forEach((_,i)=>adj[i]=[]);
+  edges.forEach(e=>{ if(adj[e.from]) adj[e.from].push({to:e.to,w:e.weight}); });
+  return {nodes, edges, adj, si:0, ei:1};
+}
+
+// Synthetic fallback graph
+function buildSyntheticGraph(s, e) {
+  const nodes = [{lat:s.lat,lng:s.lng,idx:0}];
+  const mLat = (s.lat+e.lat)/2, mLng = (s.lng+e.lng)/2;
+  const sp = Math.max(Math.abs(e.lat-s.lat),Math.abs(e.lng-s.lng));
+  for(let i=1;i<90;i++){
+    const t=i/90;
+    const jL=sp*(Math.random()-0.5)*1.8, jG=sp*(Math.random()-0.5)*1.8;
+    nodes.push({lat:s.lat+(e.lat-s.lat)*t+jL,lng:s.lng+(e.lng-s.lng)*t+jG,idx:i});
+  }
+  nodes.push({lat:e.lat,lng:e.lng,idx:90});
+  const edges=[];
+  for(let i=0;i<nodes.length;i++){
+    for(let j=i+1;j<nodes.length;j++){
+      const d=haversine(nodes[i].lat,nodes[i].lng,nodes[j].lat,nodes[j].lng);
+      if(d<1.2){
+        edges.push({from:i,to:j,weight:d});
+        edges.push({from:j,to:i,weight:d});
+      }
+    }
+  }
+  const adj={};
+  nodes.forEach((_,i)=>adj[i]=[]);
+  edges.forEach(e=>adj[e.from]&&adj[e.from].push({to:e.to,w:e.weight}));
+  return {nodes,edges,adj,si:0,ei:90};
+}
+
+// ═══════════════════════════════════════════════════════
+//  ALGORITHMS (return explored order for animation)
+// ═══════════════════════════════════════════════════════
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dL=(lat2-lat1)*Math.PI/180,dG=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dL/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dG/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function astar(nodes,adj,si,ei){
+  const h=i=>haversine(nodes[i].lat,nodes[i].lng,nodes[ei].lat,nodes[ei].lng);
+  const g=new Array(nodes.length).fill(Infinity);
+  const f=new Array(nodes.length).fill(Infinity);
+  const prev=new Array(nodes.length).fill(-1);
+  const open=new Set([si]);
+  const closed=new Set();
+  g[si]=0; f[si]=h(si);
+  const order=[];
+  while(open.size>0){
+    let cur=-1,best=Infinity;
+    for(const n of open)if(f[n]<best){best=f[n];cur=n;}
+    if(cur===ei)break;
+    open.delete(cur);closed.add(cur);
+    order.push(cur);
+    for(const {to,w} of (adj[cur]||[])){
+      if(closed.has(to))continue;
+      const ng=g[cur]+w;
+      if(ng<g[to]){prev[to]=cur;g[to]=ng;f[to]=ng+h(to);open.add(to);}
+    }
+  }
+  let c=ei; const path=[];
+  while(c!==-1){path.unshift(c);c=prev[c];}
+  return {path:path[0]===si?path:[],dist:g[ei],explored:order};
+}
+
+function dijkstra(nodes,adj,si,ei){
+  const dist=new Array(nodes.length).fill(Infinity);
+  const prev=new Array(nodes.length).fill(-1);
+  const vis=new Set();
+  const pq=[[0,si]];
+  dist[si]=0;
+  const order=[];
+  while(pq.length){
+    pq.sort((a,b)=>a[0]-b[0]);
+    const[d,u]=pq.shift();
+    if(vis.has(u))continue;
+    vis.add(u);order.push(u);
+    if(u===ei)break;
+    for(const{to,w}of(adj[u]||[])){
+      const nd=d+w;
+      if(nd<dist[to]){dist[to]=nd;prev[to]=u;pq.push([nd,to]);}
+    }
+  }
+  let c=ei;const path=[];
+  while(c!==-1){path.unshift(c);c=prev[c];}
+  return{path:path[0]===si?path:[],dist:dist[ei],explored:order};
+}
+
+function bfs(nodes,adj,si,ei){
+  const prev=new Array(nodes.length).fill(-1);
+  const vis=new Set([si]);
+  const q=[si];
+  const order=[];
+  while(q.length){
+    const u=q.shift();order.push(u);
+    if(u===ei)break;
+    for(const{to}of(adj[u]||[])){
+      if(!vis.has(to)){vis.add(to);prev[to]=u;q.push(to);}
+    }
+  }
+  let c=ei;const path=[];
+  while(c!==-1){path.unshift(c);c=prev[c];}
+  const dist=path.length>1
+    ?path.slice(1).reduce((s,n,i)=>s+haversine(nodes[path[i]].lat,nodes[path[i]].lng,nodes[n].lat,nodes[n].lng),0)
+    :Infinity;
+  return{path:path[0]===si?path:[],dist,explored:order};
+}
+
+function runAlgo(nodes,adj,si,ei){
+  if(algo==='astar')return astar(nodes,adj,si,ei);
+  if(algo==='dijkstra')return dijkstra(nodes,adj,si,ei);
+  return bfs(nodes,adj,si,ei);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAIN FIND ROUTE
+// ═══════════════════════════════════════════════════════
+async function findRoute(){
+  if(!startLL||!endLL)return;
+  clearLayers();
+  clearAnim();
+  document.getElementById('results-panel').style.display='none';
+  document.getElementById('err-card').style.display='none';
+  document.getElementById('loading').style.display='flex';
+  document.getElementById('find-btn').disabled=true;
+
+  let graph = null;
+  let osmCount = 0;
+  let usedFallback = false;
+  let osrmRouteCoords = null;
+  let osrmMeta = null;
+
+  // 1. Try OSRM first (fastest, most reliable, real road geometry)
+  try {
+    setLoad('Fetching real road route...','Querying OSRM routing engine');
+    const osrmData = await fetchOSRMRoute(startLL, endLL);
+    const route = osrmData.routes[0];
+    osrmRouteCoords = route.geometry.coordinates;
+    osrmMeta = { dist: route.distance/1000, duration: route.duration };
+    osmCount = osrmRouteCoords.length;
+    setLoad('Building graph from road geometry...', `Loaded ${osmCount} road coordinate nodes`);
+    await wait(150);
+    graph = buildGraphFromOSRM(osrmRouteCoords);
+  } catch(e1) {
+    // 2. Try Overpass API
+    try {
+      setLoad('Trying OpenStreetMap Overpass...','OSRM unavailable, switching to Overpass');
+      await wait(200);
+      const osm = await fetchRoadNetwork(startLL, endLL);
+      const n = osm.elements.filter(e=>e.type==='node').length;
+      osmCount = n;
+      setLoad('Building graph...', `Loaded ${n} OSM nodes`);
+      await wait(150);
+      graph = buildGraphFromOSM(osm, startLL, endLL);
+    } catch(e2) {
+      // 3. Synthetic fallback
+      usedFallback = true;
+      document.getElementById('err-card').style.display='block';
+      setLoad('Using synthetic graph...','All APIs unavailable — using fallback');
+      await wait(300);
+      graph = buildSyntheticGraph(startLL, endLL);
+    }
+  }
+
+  const {nodes, edges, adj, si, ei} = graph;
+
+  // draw road network
+  setLoad('Rendering road network...','Drawing edges on map');
+  await wait(150);
+  const roadLines=[];
+  edges.filter((_,i)=>i%2===0).forEach(e=>{
+    const a=nodes[e.from],b=nodes[e.to];
+    if(a&&b) roadLines.push([[a.lat,a.lng],[b.lat,b.lng]]);
+  });
+  if(roadLines.length>0){
+    roadLayer=L.polyline(roadLines,{color:'#38bdf820',weight:1.5,opacity:0.6}).addTo(map);
+  }
+
+  setLoad('Running '+algo.toUpperCase()+'...','Computing optimal path');
+  await wait(150);
+  const t0=performance.now();
+  const result=runAlgo(nodes,adj,si,ei);
+  const resA=astar(nodes,adj,si,ei);
+  const resD=dijkstra(nodes,adj,si,ei);
+  const resB=bfs(nodes,adj,si,ei);
+  const ms=(performance.now()-t0).toFixed(2);
+
+  document.getElementById('loading').style.display='none';
+  document.getElementById('find-btn').disabled=false;
+
+  if(!result.path||result.path.length<2){
+    toast('No path found — try closer points');
+    return;
+  }
+
+  // fit bounds
+  const pathCoords=result.path.map(i=>[nodes[i].lat,nodes[i].lng]);
+  const bnd=L.latLngBounds(pathCoords);
+  map.fitBounds(bnd,{padding:[60,80]});
+
+  // populate results — use OSRM accurate data if available
+  const dist = osrmMeta ? osrmMeta.dist : (result.dist===Infinity?0:result.dist);
+  const tmin = osrmMeta ? Math.round(osrmMeta.duration/60) : Math.round(dist/0.5);
+  document.getElementById('r-dist').textContent=dist.toFixed(2)+' km';
+  document.getElementById('r-time').textContent=tmin+' min (driving)';
+  document.getElementById('r-expl').textContent=result.explored.length;
+  document.getElementById('r-segs').textContent=result.path.length;
+  document.getElementById('r-algo').textContent=algo.toUpperCase();
+  document.getElementById('r-ms').textContent=ms+' ms';
+  document.getElementById('r-osmn').textContent=osrmMeta?`${osmCount} (OSRM)`:usedFallback?'N/A (fallback)':osmCount;
+  document.getElementById('hv-nodes').textContent=result.explored.length;
+  document.getElementById('hv-dist').textContent=dist.toFixed(1);
+  document.getElementById('hv-ms').textContent=ms;
+
+  // comparison
+  const algos=[{n:'A*',r:resA},{n:'Dijkstra',r:resD},{n:'BFS',r:resB}];
+  const minD=Math.min(...algos.map(a=>a.r.dist));
+  document.getElementById('cmp-grid').innerHTML=algos.map(a=>`
+    <div class="cbox ${a.r.dist===minD?'win':''}">
+      <div class="cname">${a.n}</div>
+      <div class="cdist" style="color:${a.r.dist===minD?'var(--accent)':'var(--muted)'}">${a.r.dist===Infinity?'N/A':a.r.dist.toFixed(2)+'km'}</div>
+      <div class="cnodes">${a.r.explored.length} nodes</div>
+    </div>`).join('');
+
+  // turn by turn
+  const steps=makeTurnByTurn(result.path,nodes);
+  document.getElementById('step-list').innerHTML=steps.map((s,i)=>`
+    <div class="step"><div class="snum">${i+1}</div><div class="stext">${s}</div></div>`).join('');
+
+  document.getElementById('results-panel').style.display='block';
+
+  // start animation
+  lastResult={nodes,result,pathCoords};
+  startAnimation(nodes,result.explored,result.path);
+}
+
+// ═══════════════════════════════════════════════════════
+//  ANIMATION ENGINE
+// ═══════════════════════════════════════════════════════
+function startAnimation(nodes, exploredOrder, path){
+  clearAnim();
+  animFrames=exploredOrder.map(i=>nodes[i]);
+  animIdx=0; animDone=false;
+  exploredMarkers=[];
+
+  document.getElementById('anim-bar').style.display='flex';
+  document.getElementById('hint-text').textContent=`Animating ${algo.toUpperCase()} — exploring nodes...`;
+
+  animRunning=true;
+  document.getElementById('anim-play').textContent='⏸ Pause';
+  runAnimStep(nodes,path);
+}
+
+function runAnimStep(nodes, path){
+  if(!animRunning)return;
+  if(animIdx>=animFrames.length){
+    finishAnim(nodes,path);
+    return;
+  }
+
+  const batchSize=Math.max(1,Math.floor(animSpeed*1.5));
+  for(let b=0;b<batchSize&&animIdx<animFrames.length;b++,animIdx++){
+    const n=animFrames[animIdx];
+    if(!n)continue;
+    const m=L.circleMarker([n.lat,n.lng],{
+      radius:3,color:'#8b5cf6',fillColor:'#8b5cf6',fillOpacity:0.5,weight:0
+    }).addTo(map);
+    exploredMarkers.push(m);
+  }
+
+  const pct=Math.round(animIdx/animFrames.length*100);
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('anim-info').textContent=`Explored ${animIdx}/${animFrames.length} nodes`;
+
+  const delay=Math.max(10,80-animSpeed*7);
+  animTimer=setTimeout(()=>runAnimStep(nodes,path),delay);
+}
+
+function finishAnim(nodes,path){
+  animDone=true;animRunning=false;
+  document.getElementById('prog-fill').style.width='100%';
+  document.getElementById('anim-play').textContent='▶ Play';
+  document.getElementById('anim-info').textContent='Path found!';
+  document.getElementById('hint-text').textContent='Route complete — path drawn in green';
+
+  // draw path with animation
+  const coords=path.map(i=>[nodes[i].lat,nodes[i].lng]);
+  pathPolyline=L.polyline([],{color:'#00e5a0',weight:5,opacity:0.95,lineCap:'round',lineJoin:'round'}).addTo(map);
+
+  let pi=0;
+  function drawNext(){
+    if(pi>=coords.length){return;}
+    pathPolyline.addLatLng(coords[pi++]);
+    requestAnimationFrame(drawNext);
+  }
+  drawNext();
+}
+
+function toggleAnim(){
+  if(animDone){restartAnim();return;}
+  if(animRunning){
+    animRunning=false;
+    clearTimeout(animTimer);
+    document.getElementById('anim-play').textContent='▶ Resume';
+  } else {
+    animRunning=true;
+    document.getElementById('anim-play').textContent='⏸ Pause';
+    if(lastResult) runAnimStep(lastResult.nodes,lastResult.result.path);
+  }
+}
+
+function restartAnim(){
+  if(!lastResult)return;
+  clearAnim();
+  exploredMarkers.forEach(m=>map.removeLayer(m));
+  exploredMarkers=[];
+  if(pathPolyline){map.removeLayer(pathPolyline);pathPolyline=null;}
+  startAnimation(lastResult.nodes,lastResult.result.explored,lastResult.result.path);
+}
+
+function skipAnim(){
+  clearTimeout(animTimer);
+  animRunning=false;
+  if(!lastResult)return;
+  const {nodes,result}=lastResult;
+  // draw all explored
+  exploredMarkers.forEach(m=>map.removeLayer(m));
+  exploredMarkers=[];
+  result.explored.forEach(i=>{
+    const n=nodes[i];
+    if(!n)return;
+    const m=L.circleMarker([n.lat,n.lng],{radius:3,color:'#8b5cf6',fillColor:'#8b5cf6',fillOpacity:0.5,weight:0}).addTo(map);
+    exploredMarkers.push(m);
+  });
+  finishAnim(nodes,result.path);
+}
+
+function clearAnim(){
+  clearTimeout(animTimer);
+  animRunning=false;
+  animDone=false;
+  animIdx=0;
+  animFrames=[];
+  exploredMarkers.forEach(m=>map.removeLayer(m));
+  exploredMarkers=[];
+  if(pathPolyline){map.removeLayer(pathPolyline);pathPolyline=null;}
+  document.getElementById('anim-bar').style.display='none';
+  document.getElementById('prog-fill').style.width='0%';
+}
+
+// ═══════════════════════════════════════════════════════
+//  TURN BY TURN
+// ═══════════════════════════════════════════════════════
+function bearing(lat1,lon1,lat2,lon2){
+  const φ1=lat1*Math.PI/180,φ2=lat2*Math.PI/180;
+  const Δλ=(lon2-lon1)*Math.PI/180;
+  const y=Math.sin(Δλ)*Math.cos(φ2);
+  const x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  return(Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function bearingToDir(b){
+  const dirs=['North','NE','East','SE','South','SW','West','NW'];
+  return dirs[Math.round(b/45)%8];
+}
+function makeTurnByTurn(path,nodes){
+  if(path.length<2)return[];
+  const steps=['Depart from start point'];
+  const chunk=Math.max(1,Math.floor(path.length/6));
+  for(let i=chunk;i<path.length-1;i+=chunk){
+    const a=nodes[path[i-1]],b=nodes[path[i]];
+    if(!a||!b)continue;
+    const d=haversine(a.lat,a.lng,b.lat,b.lng);
+    const br=bearing(a.lat,a.lng,b.lat,b.lng);
+    const dir=bearingToDir(br);
+    steps.push(`Head ${dir} for ${(d*1000).toFixed(0)} m`);
+  }
+  steps.push('Arrive at destination');
+  return steps;
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+function clearLayers(){
+  [routeLayer,exploredLayer,roadLayer].forEach(l=>{if(l)map.removeLayer(l);});
+  routeLayer=exploredLayer=roadLayer=null;
+}
+function setLoad(main,sub){
+  document.getElementById('load-text').textContent=main;
+  document.getElementById('load-sub').textContent=sub;
+}
+function wait(ms){return new Promise(r=>setTimeout(r,ms));}
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+function resetAll(){
+  clearLayers(); clearAnim();
+  [startM,endM].forEach(m=>{if(m)map.removeLayer(m);});
+  startM=endM=null; startLL=endLL=null;
+  lastResult=null;
+  document.getElementById('coords-start').textContent='Click map to place';
+  document.getElementById('coords-end').textContent='Click map to place';
+  document.getElementById('addr-start').textContent='';
+  document.getElementById('addr-end').textContent='';
+  document.getElementById('find-btn').disabled=true;
+  document.getElementById('results-panel').style.display='none';
+  document.getElementById('err-card').style.display='none';
+  document.getElementById('hv-nodes').textContent='—';
+  document.getElementById('hv-dist').textContent='—';
+  document.getElementById('hv-ms').textContent='—';
+  ['start','end'].forEach(x=>{
+    document.getElementById('card-'+x).classList.remove('placed','active-card');
+  });
+  setMode('start');
+  document.getElementById('hint-text').textContent='Click anywhere on the map to place your start point';
+}
+
+initMap();
+</script>
+</body>
+</html>
